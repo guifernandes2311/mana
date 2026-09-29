@@ -109,7 +109,7 @@ body{ -webkit-tap-highlight-color:transparent; }
 body.is-home .site-header{ display:none; }
 .nav-row{ display:flex; align-items:center; justify-content:space-between; padding:16px clamp(16px, 5vw, 28px); max-width:var(--maxw); margin:0 auto; gap:10px; }
 .brand{ display:flex; align-items:center; gap:12px; }
-.brand-mark{ width:40px; height:40px; flex:none; color:var(--brown-800); }
+.brand-mark{ height:44px; width:auto; flex:none; display:block; }
 .brand-text{ font-family:'Fraunces', serif; font-weight:700; font-size:1.4rem; color:var(--brown-900); letter-spacing:0.01em; }
 .nav-links{ display:flex; gap:6px; list-style:none; margin:0; padding:0; }
 .nav-links button{
@@ -506,13 +506,7 @@ body.is-home .site-header{ display:none; }
 <header class="site-header">
   <div class="nav-row">
     <a href="#home" class="brand" data-nav="home" style="cursor:pointer;">
-      <svg class="brand-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10 40c8-16 36-16 44 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-        <path d="M8 40h48" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-        <path d="M16 40V22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-        <path d="M12 22c0-4 2-7 4-7s4 3 4 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-        <path d="M48 40c4-2 6-7 5-13-4 1-8 5-9 9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+      <img class="brand-mark" src="logo-mana-crop.svg" alt="Logo Restaurante Maná">
       <span class="brand-text">Restaurante Maná</span>
     </a>
 
