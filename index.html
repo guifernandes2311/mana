@@ -505,7 +505,7 @@ body.is-home .site-header{ display:none; }
      ============================================================ -->
 <header class="site-header">
   <div class="nav-row">
-    <a href="#home" class="brand" data-nav="home" style="cursor:pointer;">
+    <a href="#/" class="brand" data-nav="home" style="cursor:pointer;">
       <img class="brand-mark" src="logo-mana-crop.svg" alt="Logo Restaurante Maná">
       <span class="brand-text">Restaurante Maná</span>
     </a>
@@ -720,10 +720,10 @@ body.is-home .site-header{ display:none; }
       <div class="footer-col">
         <h4>Navegação</h4>
         <ul>
-          <li><a data-nav="home" href="#home">Início</a></li>
-          <li><a data-nav="cardapio" href="#cardapio">Cardápio</a></li>
-          <li><a data-nav="historia" href="#historia">Nossa História</a></li>
-          <li><a data-nav="contato" href="#contato">Contato</a></li>
+          <li><a data-nav="home" href="#/">Início</a></li>
+          <li><a data-nav="cardapio" href="#/cardapio">Cardápio</a></li>
+          <li><a data-nav="historia" href="#/historia">Nossa História</a></li>
+          <li><a data-nav="contato" href="#/contato">Contato</a></li>
         </ul>
       </div>
       <div class="footer-col">
@@ -923,9 +923,7 @@ function priceFor(product, size) {
 
 /* ============================================================
    NAVEGAÇÃO ENTRE VIEWS
-   (sem uso de history.pushState/replaceState — evita erro de
-   segurança em ambientes de preview em iframe/sandbox, como o
-   preview do Claude, que roda em "about:srcdoc")
+   (as views são trocadas pelo roteador de hash — ver "ROTAS")
    ============================================================ */
 function goTo(viewName) {
   if (viewName === state.view) return;
@@ -1017,7 +1015,7 @@ function initReveal(root) {
 document.querySelectorAll("[data-nav]").forEach((el) => {
   el.addEventListener("click", (e) => {
     e.preventDefault();
-    goTo(el.dataset.nav);
+    navigate(viewPath(el.dataset.nav));
   });
 });
 
@@ -1058,11 +1056,7 @@ function renderCategoryRail() {
     (c) => `<button class="category-chip ${c.id === state.category ? "active" : ""}" data-cat="${c.id}">${c.label}</button>`
   ).join("");
   rail.querySelectorAll("[data-cat]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.category = btn.dataset.cat;
-      renderCategoryRail();
-      renderMenuGrid();
-    });
+    btn.addEventListener("click", () => navigate(`/cardapio/${btn.dataset.cat}`));
   });
 }
 
@@ -1251,9 +1245,9 @@ const overlay = document.getElementById("overlay");
 function openCart() { cartDrawer.classList.add("open"); overlay.classList.add("open"); }
 function closeCart() { cartDrawer.classList.remove("open"); overlay.classList.remove("open"); }
 
-document.getElementById("cartOpenBtn")?.addEventListener("click", openCart);
-document.getElementById("cartCloseBtn").addEventListener("click", closeCart);
-overlay.addEventListener("click", () => { closeCart(); closeCheckout(); });
+document.getElementById("cartOpenBtn")?.addEventListener("click", () => navigate("/carrinho"));
+document.getElementById("cartCloseBtn").addEventListener("click", () => navigate(lastPagePath));
+overlay.addEventListener("click", () => navigate(lastPagePath));
 
 /* ============================================================
    CHECKOUT (MODAL + ENVIO PARA WHATSAPP)
@@ -1268,8 +1262,8 @@ function openCheckout() {
 }
 function closeCheckout() { checkoutModal.classList.remove("open"); overlay.classList.remove("open"); }
 
-document.getElementById("checkoutBtn").addEventListener("click", openCheckout);
-document.getElementById("modalCancelBtn").addEventListener("click", closeCheckout);
+document.getElementById("checkoutBtn").addEventListener("click", () => navigate("/pedido"));
+document.getElementById("modalCancelBtn").addEventListener("click", () => navigate("/carrinho"));
 
 document.getElementById("custDelivery").addEventListener("change", (e) => {
   document.getElementById("addressField").style.display = e.target.value === "Retirada no local" ? "none" : "block";
@@ -1318,7 +1312,7 @@ document.getElementById("checkoutForm").addEventListener("submit", (e) => {
   const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
   window.open(url, "_blank");
 
-  closeCheckout();
+  navigate(lastPagePath);
   showToast("Pedido pronto! Confirme o envio no WhatsApp.");
 });
 
@@ -1340,6 +1334,63 @@ function showToast(msg) {
 }
 
 /* ============================================================
+   ROTAS (cada botão tem sua própria URL, via hash)
+     #/                      → Início
+     #/cardapio              → Cardápio (categoria atual)
+     #/cardapio/<categoria>  → Cardápio filtrado (marmitas, porcoes, ...)
+     #/historia              → Nossa História
+     #/contato               → Contato
+     #/carrinho              → abre o carrinho
+     #/pedido                → abre o formulário de finalizar pedido
+   Usa só location.hash, então funciona abrindo o arquivo direto
+   (file://) ou em qualquer hospedagem estática, sem servidor.
+   ============================================================ */
+const VIEWS = ["home", "cardapio", "historia", "contato"];
+let lastPagePath = "/"; // última view "de página", para onde voltar ao fechar carrinho/pedido
+
+const viewPath = (view) => (view === "home" ? "/" : `/${view}`);
+const currentPath = () => location.hash.replace(/^#/, "") || "/";
+
+function navigate(path) {
+  if (currentPath() === path) router();
+  else location.hash = path;
+}
+
+function router() {
+  const [page = "home", sub] = currentPath().split("/").filter(Boolean);
+
+  if (page === "carrinho") {
+    closeCheckout();
+    openCart();
+    return;
+  }
+  if (page === "pedido") {
+    if (cartCount() === 0) { location.replace("#/carrinho"); return; }
+    openCheckout();
+    return;
+  }
+
+  if (!VIEWS.includes(page)) { location.replace("#/"); return; }
+
+  closeCart();
+  closeCheckout();
+
+  if (page === "cardapio" && sub) {
+    if (!CATEGORIES.some((c) => c.id === sub)) { location.replace("#/cardapio"); return; }
+    if (sub !== state.category) {
+      state.category = sub;
+      renderCategoryRail();
+      renderMenuGrid();
+    }
+  }
+
+  lastPagePath = currentPath();
+  goTo(page);
+}
+
+window.addEventListener("hashchange", router);
+
+/* ============================================================
    INICIALIZAÇÃO
    ============================================================ */
 renderHighlights();
@@ -1347,6 +1398,7 @@ renderCategoryRail();
 renderMenuGrid();
 renderCart();
 initReveal(document);
+router();
 </script>
 
 </body>
