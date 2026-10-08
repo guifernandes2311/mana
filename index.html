@@ -135,6 +135,7 @@ body.is-home .site-header{ display:none; }
 .cart-badge.bump{ animation:badge-bump .35s ease; }
 @keyframes badge-bump{ 0%{ transform:scale(1); } 45%{ transform:scale(1.4); } 100%{ transform:scale(1); } }
 .hamburger{ display:none; }
+.mobile-menu{ display:none; }
 
 @media (max-width:900px){
   .nav-links{ display:none; }
@@ -506,7 +507,7 @@ body.is-home .site-header{ display:none; }
 <header class="site-header">
   <div class="nav-row">
     <a href="#/" class="brand" data-nav="home" style="cursor:pointer;">
-      <img class="brand-mark" src="logo-mana-crop.svg" alt="Logo Restaurante Maná">
+      <img class="brand-mark" src="https://raw.githubusercontent.com/guifernandes2311/mana/refs/heads/main/logo-mana-crop.svg" alt="Logo Restaurante Maná">
       <span class="brand-text">Restaurante Maná</span>
     </a>
 
@@ -530,12 +531,12 @@ body.is-home .site-header{ display:none; }
     </div>
   </div>
 
-  <!-- <div class="mobile-menu" id="mobileMenu">
+  <div class="mobile-menu" id="mobileMenu">
     <button data-nav="home" class="active">Início</button>
     <button data-nav="cardapio">Cardápio</button>
     <button data-nav="historia">Nossa História</button>
     <button data-nav="contato">Contato</button>
-  </div> -->
+  </div>
 </header>
 
 <main>
@@ -925,8 +926,8 @@ function priceFor(product, size) {
    NAVEGAÇÃO ENTRE VIEWS
    (as views são trocadas pelo roteador de hash — ver "ROTAS")
    ============================================================ */
-function goTo(viewName) {
-  if (viewName === state.view) return;
+function goTo(viewName, afterApply) {
+  if (viewName === state.view) { afterApply?.(); return; }
 
   playRouteTransition();
 
@@ -936,7 +937,8 @@ function goTo(viewName) {
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === viewName));
     document.querySelectorAll("[data-nav]").forEach((el) => el.classList.toggle("active", el.dataset.nav === viewName));
     document.getElementById("mobileMenu")?.classList.remove("open");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (afterApply) afterApply();
+    else window.scrollTo({ top: 0, behavior: "smooth" });
     initReveal(document);
   };
 
@@ -1020,7 +1022,8 @@ document.querySelectorAll("[data-nav]").forEach((el) => {
 });
 
 document.getElementById("hamburgerBtn")?.addEventListener("click", () => {
-  document.getElementById("mobileMenu")?.classList.toggle("open");
+  const isOpen = document.getElementById("mobileMenu")?.classList.contains("open");
+  navigate(isOpen ? lastPagePath : "/menu");
 });
 
 /* ============================================================
@@ -1091,7 +1094,7 @@ function renderMenuGrid() {
       }
 
       return `
-      <div class="product-card reveal">
+      <div class="product-card reveal" data-product-card="${p.id}">
         <div class="product-photo"><img src="${p.img}" alt="${p.name}" loading="lazy"></div>
         <div class="product-info">
           <h3>${p.name}</h3>
@@ -1110,38 +1113,27 @@ function renderMenuGrid() {
     .join("");
 
   // seletor de tamanho (marmitas)
+  // cada botão do card leva para a URL do produto (ver "ROTAS")
   grid.querySelectorAll("[data-size]").forEach((chip) => {
     chip.addEventListener("click", () => {
-      const pid = parseInt(chip.dataset.pid, 10);
-      const size = chip.dataset.size;
-      const row = document.getElementById("sizes-" + pid);
-      row.dataset.selected = size;
-      row.querySelectorAll(".size-chip").forEach((c) => c.classList.toggle("active", c.dataset.size === size));
-      document.getElementById("price-" + pid).textContent = fmtBRL(priceFor(findProduct(pid), size));
+      const p = findProduct(parseInt(chip.dataset.pid, 10));
+      navigate(productPath(p, chip.dataset.size, readProductUI(p).qty), { replace: true });
     });
   });
 
-  // seletor de quantidade local (antes de adicionar)
   grid.querySelectorAll("[data-step]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-      const span = document.getElementById("qty-" + id);
-      let val = parseInt(span.textContent, 10);
-      val = Math.max(1, val + parseInt(btn.dataset.step, 10));
-      span.textContent = val;
+      const p = findProduct(parseInt(btn.dataset.id, 10));
+      const { size, qty } = readProductUI(p);
+      navigate(productPath(p, size, Math.max(1, qty + parseInt(btn.dataset.step, 10))), { replace: true });
     });
   });
 
   grid.querySelectorAll("[data-add]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = parseInt(btn.dataset.add, 10);
-      const product = findProduct(id);
-      const qty = parseInt(document.getElementById("qty-" + id).textContent, 10);
-      const sizeRow = document.getElementById("sizes-" + id);
-      const size = sizeRow ? sizeRow.dataset.selected : null;
-      addToCart(id, size, qty);
-      const label = size ? `${product.name} (${size})` : product.name;
-      showToast(label + " adicionado ao carrinho");
+      const p = findProduct(parseInt(btn.dataset.add, 10));
+      const { size, qty } = readProductUI(p);
+      navigate(productPath(p, size, qty, "adicionar"));
     });
   });
 
@@ -1209,14 +1201,12 @@ function renderCart() {
       .join("");
 
     itemsEl.querySelectorAll("[data-cartstep]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const key = btn.dataset.ckey;
-        const delta = parseInt(btn.dataset.cartstep, 10);
-        setQty(key, state.cart[key].qty + delta);
-      });
+      btn.addEventListener("click", () =>
+        navigate(cartItemPath(btn.dataset.ckey, btn.dataset.cartstep === "1" ? "mais" : "menos"))
+      );
     });
     itemsEl.querySelectorAll("[data-remove]").forEach((btn) => {
-      btn.addEventListener("click", () => removeFromCart(btn.dataset.remove));
+      btn.addEventListener("click", () => navigate(cartItemPath(btn.dataset.remove, "remover")));
     });
   }
 
@@ -1265,17 +1255,28 @@ function closeCheckout() { checkoutModal.classList.remove("open"); overlay.class
 document.getElementById("checkoutBtn").addEventListener("click", () => navigate("/pedido"));
 document.getElementById("modalCancelBtn").addEventListener("click", () => navigate("/carrinho"));
 
-document.getElementById("custDelivery").addEventListener("change", (e) => {
-  document.getElementById("addressField").style.display = e.target.value === "Retirada no local" ? "none" : "block";
-});
+function setDelivery(value) {
+  document.getElementById("custDelivery").value = value;
+  document.getElementById("addressField").style.display = value === "Retirada no local" ? "none" : "block";
+}
 
+function setPayment(value) {
+  document.querySelectorAll('#payOptions input[name="pay"]').forEach((input) => { input.checked = input.value === value; });
+  document.querySelectorAll(".pay-chip").forEach((chip) => chip.classList.toggle("checked", chip.querySelector("input").checked));
+}
+
+/* URL do pedido com as escolhas atuais do formulário */
+function checkoutPath() {
+  const delivery = document.getElementById("custDelivery").value;
+  const payment = document.querySelector('#payOptions input[name="pay"]:checked').value;
+  return `/pedido?entrega=${slugify(delivery)}&pagamento=${slugify(payment)}`;
+}
+
+document.getElementById("custDelivery").addEventListener("change", () => navigate(checkoutPath(), { replace: true }));
 document.querySelectorAll('#payOptions input[name="pay"]').forEach((input) => {
-  input.addEventListener("change", () => {
-    document.querySelectorAll(".pay-chip").forEach((chip) => chip.classList.toggle("checked", chip.querySelector("input").checked));
-  });
+  input.addEventListener("change", () => navigate(checkoutPath(), { replace: true }));
 });
-document.querySelector('#payOptions input[value="Pix"]').checked = true;
-document.querySelector('#payOptions .pay-chip').classList.add("checked");
+setPayment("Pix");
 
 document.getElementById("checkoutForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -1340,33 +1341,108 @@ function showToast(msg) {
      #/cardapio/<categoria>  → Cardápio filtrado (marmitas, porcoes, ...)
      #/historia              → Nossa História
      #/contato               → Contato
+     #/cardapio/<categoria>/<produto>?tamanho=M&qtd=2
+                             → produto (tamanho e quantidade escolhidos)
+     #/cardapio/<categoria>/<produto>/adicionar?tamanho=M&qtd=2
+                             → adiciona ao carrinho
      #/carrinho              → abre o carrinho
+     #/carrinho/<produto>/(mais|menos|remover)?tamanho=M
+                             → altera um item do carrinho
      #/pedido                → abre o formulário de finalizar pedido
+     #/pedido?entrega=retirada-no-local&pagamento=pix
+                             → entrega e forma de pagamento escolhidas
+     #/menu                  → abre o menu mobile (☰)
+   Rotas de ação (adicionar, mais, menos, remover) executam a ação e
+   trocam a URL pela da tela resultante (location.replace), para que
+   recarregar a página ou usar "voltar" não repita a ação.
    Usa só location.hash, então funciona abrindo o arquivo direto
    (file://) ou em qualquer hospedagem estática, sem servidor.
    ============================================================ */
 const VIEWS = ["home", "cardapio", "historia", "contato"];
 let lastPagePath = "/"; // última view "de página", para onde voltar ao fechar carrinho/pedido
 
+const slugify = (text) =>
+  text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const productSlug = (p) => slugify(p.name);
+const findBySlug = (slug) => PRODUCTS.find((p) => productSlug(p) === slug);
+
 const viewPath = (view) => (view === "home" ? "/" : `/${view}`);
 const currentPath = () => location.hash.replace(/^#/, "") || "/";
 
-function navigate(path) {
+function productPath(p, size, qty, action) {
+  const params = new URLSearchParams();
+  if (size) params.set("tamanho", size);
+  if (qty && qty !== 1) params.set("qtd", qty);
+  const qs = params.toString();
+  return `/cardapio/${p.category}/${productSlug(p)}${action ? "/" + action : ""}${qs ? "?" + qs : ""}`;
+}
+
+function cartItemPath(key, action) {
+  const line = state.cart[key];
+  const p = findProduct(line.id);
+  return `/carrinho/${productSlug(p)}/${action}${line.size ? "?tamanho=" + line.size : ""}`;
+}
+
+/* lê / aplica o tamanho e a quantidade mostrados no card de um produto */
+function readProductUI(p) {
+  const sizeRow = document.getElementById("sizes-" + p.id);
+  return {
+    size: sizeRow ? sizeRow.dataset.selected : null,
+    qty: parseInt(document.getElementById("qty-" + p.id).textContent, 10),
+  };
+}
+function applyProductUI(p, size, qty) {
+  const sizeRow = document.getElementById("sizes-" + p.id);
+  if (sizeRow) {
+    sizeRow.dataset.selected = size;
+    sizeRow.querySelectorAll(".size-chip").forEach((c) => c.classList.toggle("active", c.dataset.size === size));
+    document.getElementById("price-" + p.id).textContent = fmtBRL(priceFor(p, size));
+  }
+  document.getElementById("qty-" + p.id).textContent = qty;
+}
+
+function navigate(path, { replace = false } = {}) {
   if (currentPath() === path) router();
+  else if (replace) location.replace("#" + path);
   else location.hash = path;
 }
 
 function router() {
-  const [page = "home", sub] = currentPath().split("/").filter(Boolean);
+  const [path, query = ""] = currentPath().split("?");
+  const params = new URLSearchParams(query);
+  const [page = "home", sub, item, action] = path.split("/").filter(Boolean);
 
   if (page === "carrinho") {
+    if (sub) {
+      const p = findBySlug(sub);
+      const key = p && cartKey(p.id, hasSizes(p) ? params.get("tamanho") : null);
+      if (key && state.cart[key]) {
+        if (item === "mais") setQty(key, state.cart[key].qty + 1);
+        else if (item === "menos") setQty(key, state.cart[key].qty - 1);
+        else if (item === "remover") removeFromCart(key);
+      }
+      location.replace("#/carrinho");
+      return;
+    }
     closeCheckout();
     openCart();
     return;
   }
   if (page === "pedido") {
     if (cartCount() === 0) { location.replace("#/carrinho"); return; }
+    const payment = [...document.querySelectorAll('#payOptions input[name="pay"]')]
+      .find((input) => slugify(input.value) === params.get("pagamento"));
+    if (payment) setPayment(payment.value);
+    const delivery = [...document.getElementById("custDelivery").options]
+      .find((opt) => slugify(opt.value) === params.get("entrega"));
+    if (delivery) setDelivery(delivery.value);
     openCheckout();
+    return;
+  }
+  if (page === "menu") {
+    closeCart();
+    closeCheckout();
+    document.getElementById("mobileMenu")?.classList.add("open");
     return;
   }
 
@@ -1374,7 +1450,9 @@ function router() {
 
   closeCart();
   closeCheckout();
+  document.getElementById("mobileMenu")?.classList.remove("open");
 
+  let afterApply;
   if (page === "cardapio" && sub) {
     if (!CATEGORIES.some((c) => c.id === sub)) { location.replace("#/cardapio"); return; }
     if (sub !== state.category) {
@@ -1382,10 +1460,32 @@ function router() {
       renderCategoryRail();
       renderMenuGrid();
     }
+
+    if (item) {
+      const p = findBySlug(item);
+      if (!p || p.category !== sub) { location.replace(`#/cardapio/${sub}`); return; }
+
+      const size = hasSizes(p)
+        ? (p.sizes.find((s) => s.label === params.get("tamanho")) || p.sizes[0]).label
+        : null;
+      const qty = Math.max(1, parseInt(params.get("qtd"), 10) || 1);
+      applyProductUI(p, size, qty);
+
+      if (action === "adicionar") {
+        addToCart(p.id, size, qty);
+        showToast((size ? `${p.name} (${size})` : p.name) + " adicionado ao carrinho");
+        location.replace("#" + productPath(p, size, qty));
+        return;
+      }
+
+      const card = document.querySelector(`[data-product-card="${p.id}"]`);
+      const arriving = state.view !== "cardapio";
+      afterApply = () => card?.scrollIntoView({ behavior: "smooth", block: arriving ? "center" : "nearest" });
+    }
   }
 
-  lastPagePath = currentPath();
-  goTo(page);
+  lastPagePath = path;
+  goTo(page, afterApply);
 }
 
 window.addEventListener("hashchange", router);
